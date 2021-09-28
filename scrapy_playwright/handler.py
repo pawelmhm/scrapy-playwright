@@ -66,6 +66,9 @@ class ScrapyPlaywrightDownloadHandler(HTTPDownloadHandler):
         if "default" not in self.context_kwargs and default_context_kwargs:
             self.context_kwargs["default"] = default_context_kwargs
 
+        # TODO: make it possible to be a str, using a spider attribute with said name
+        self.configure_context = crawler.settings.get("PLAYWRIGHT_CONFIGURE_CONTEXT") or None
+
     @classmethod
     def from_crawler(cls: Type[PlaywrightHandler], crawler: Crawler) -> PlaywrightHandler:
         return cls(crawler)
@@ -91,6 +94,8 @@ class ScrapyPlaywrightDownloadHandler(HTTPDownloadHandler):
 
     async def _create_browser_context(self, name: str, context_kwargs: dict) -> BrowserContext:
         context = await self.browser.new_context(**context_kwargs)
+        if self.configure_context is not None:
+            await self.configure_context(name=name, context=context)
         context.on("close", self._make_close_browser_context_callback(name))
         logger.debug("Browser context started: '%s'", name)
         self.stats.inc_value("playwright/context_count")
@@ -132,7 +137,7 @@ class ScrapyPlaywrightDownloadHandler(HTTPDownloadHandler):
         if not isinstance(page, Page):
             page = await self._create_page(request)
         await page.unroute("**")
-        await page.route(
+        await page.context.route(
             "**",
             self._make_request_handler(
                 url=request.url,
