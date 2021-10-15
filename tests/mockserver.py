@@ -8,7 +8,16 @@ from threading import Thread
 from urllib.parse import urljoin
 
 
-class StaticMockServer:
+class BaseTestServer:
+    def __exit__(self, exc_type, exc_value, traceback):
+        self.proc.kill()
+        self.proc.communicate()
+
+    def urljoin(self, url):
+        return urljoin("http://{}:{}".format(self.address, self.port), url)
+
+
+class StaticMockServer(BaseTestServer):
     def __enter__(self):
         self.proc = Popen(
             [sys.executable, "-u", "-m", "http.server", "0", "--bind", "127.0.0.1"],
@@ -20,10 +29,6 @@ class StaticMockServer:
             self.proc.stdout.readline().strip().decode("ascii"),
         ).groups()
         return self
-
-    def __exit__(self, exc_type, exc_value, traceback):
-        self.proc.kill()
-        self.proc.communicate()
 
     def urljoin(self, url):
         return urljoin("http://{}:{}".format(self.address, self.port), url)
@@ -61,3 +66,33 @@ class MockServer:
 
     def urljoin(self, url):
         return urljoin("http://{}:{}".format(self.address, self.port), url)
+
+
+class MockProxyServer(BaseTestServer):
+    def __enter__(self):
+        self.address = "127.0.0.1"
+        # TODO randomize port
+        self.port = "8009"
+        self.proc = Popen(
+            [sys.executable, "-m", "tests.proxy", self.port, self.address],
+            stdout=PIPE
+        )
+        return self
+
+    @property
+    def url(self):
+        return f"http://{self.address}:{self.port}"
+
+
+class MockAioHttpServer(BaseTestServer):
+    def __enter__(self):
+        self.address = "127.0.0.1"
+        # TODO randomize port
+        self.port = "8011"
+        self.proc = Popen(
+            [sys.executable, "-m", "tests.mockaiohttpserver", self.port],
+            stdout=PIPE
+        )
+        return self
+
+
